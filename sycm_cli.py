@@ -1583,6 +1583,48 @@ def cmd_home_trend(args: argparse.Namespace) -> None:
         print(f"  {scope}: {detail}")
 
 
+def cmd_shop_flow_source(args: argparse.Namespace) -> None:
+    """流量/流量看板/流量来源排行/全店流量 → 全店各渠道 UV/支付买家/转化率排行（只读）。"""
+    cookies = load_taobao_cookies()
+    params = {
+        "_": str(int(time.time() * 1000)),
+        "token": cookies.get("_tb_token_", ""),
+        "dateRange": f"{args.date}|{args.date}",
+        "dateType": "day",
+        "pageSize": args.limit,
+        "page": 1,
+        "order": "desc",
+        "orderBy": args.order_by,
+        "device": args.device,
+        "flowBizType": "all",
+        "pageType": "all",
+        "indexCode": "uv,itmPayByrCnt,payRate",
+    }
+    data = _api_get(
+        "/flow/v3/overview/shopFlowSourceTop/v4.json",
+        params, cookies,
+        referer="https://sycm.taobao.com/flow/monitor/shopsource/construction",
+    )
+    if _emit_json_or_file(data, args):
+        return
+    rows = data.get("data") or []
+    print(f"# 全店流量来源  {args.date}（按 {args.order_by.upper()} 降序）")
+
+    def _walk(items: list[dict[str, Any]], depth: int = 0) -> None:
+        for row in items:
+            name = row.get("pageName", {}).get("value", "?")
+            uv = row.get("uv", {}).get("value", 0)
+            buyers = row.get("itmPayByrCnt", {}).get("value", 0)
+            rate = row.get("payRate", {}).get("value", 0) or 0
+            indent = "  " * depth
+            print(f"{indent}{name:<16} UV={uv:>7}  支付买家={buyers:>5}  转化率={rate*100:.2f}%")
+            children = row.get("children")
+            if children:
+                _walk(children, depth + 1)
+
+    _walk(rows)
+
+
 def cmd_grow_factor(args: argparse.Namespace) -> None:
     """首页/增长因子 → 广告引导/直播/新品/会员成交额（只读）。"""
     response = _fetch_order_portal(
@@ -2118,6 +2160,19 @@ def build_parser() -> argparse.ArgumentParser:
     ht_fields.add_argument("--all-fields", action="store_true", dest="all_fields",
                            help="渲染全部 62 个字段（verified 按默认顺序分组 + candidate 追加到【未破译】组）")
     ht.set_defaults(func=cmd_home_table)
+
+    sfs = sp.add_parser(
+        "shop-flow-source",
+        help="流量/流量看板/流量来源排行/全店流量 → 全店各渠道 UV/支付买家/转化率排行（只读）。",
+    )
+    sfs.add_argument("--date", default=yesterday,
+                    help=f"日期 YYYY-MM-DD（默认昨天 {yesterday}）")
+    sfs.add_argument("--limit", type=int, default=20, help="拉多少条（默认 20）")
+    sfs.add_argument("--device", default="2", help="设备参数（默认 2）")
+    sfs.add_argument("--order-by", default="uv", help="排序字段（默认 uv）")
+    sfs.add_argument("--raw", action="store_true", help="输出原始 JSON")
+    sfs.add_argument("--out", help="输出到文件")
+    sfs.set_defaults(func=cmd_shop_flow_source)
 
     return p
 
