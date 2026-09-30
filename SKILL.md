@@ -1,6 +1,6 @@
 ---
 name: sycm-cli
-description: 使用 sycm.taobao.com 的已登录本地浏览器读取淘宝/天猫自营店铺数据，生成标准报表并执行经营分析。覆盖首页大盘、销售、商品、新品、退款、接待、评价、客服对话、Excel 导出和多店铺登录态。当用户提到生意参谋、sycm、店铺数据、标准报表、店铺体检、日检、周复盘、测款、退货归因、客服质检、商品 360、新品追踪、下载店铺 Excel 或让 AI 分析店铺时使用。
+description: 使用 sycm.taobao.com 的已登录本地浏览器读取淘宝/天猫自营店铺数据，生成标准报表并执行经营分析。覆盖首页大盘、全店流量来源、销售、商品、新品、退款、接待、评价、客服对话、Excel 导出和多店铺登录态。当用户提到生意参谋、sycm、店铺数据、标准报表、店铺体检、日检、周复盘、测款、退货归因、客服质检、商品 360、新品追踪、流量来源、流量渠道、下载店铺 Excel 或让 AI 分析店铺时使用。
 ---
 
 # sycm-cli — 生意参谋数据与店铺分析 Skill
@@ -49,7 +49,7 @@ scripts/sycm.sh fetch-recent --date YYYY-MM-DD --limit 10 --out chats.json
 
 | 数据域 | 必查命令 |
 |---|---|
-| 总览大盘 | `home-overview`, `home-table`, `home-trend`, `grow-factor` |
+| 总览大盘 | `home-overview`, `home-table`, `home-trend`, `grow-factor`, `shop-flow-source` |
 | 商品与新品 | `item-list`, `cate-list`, `new-product-overview`, `new-product-list`, `new-product-trend`, `order-overview`, `order-trend`, `order-distribution`, `order-recommend` |
 | 销售与售后 | `sale-shop-list`, `sale-item-list`, `refund-item-list` |
 | 客户与客服 | `reception-list`, `evaluation-list`, `sale-cs-list`, `inquiry-loss-list`, `slow-rsps-list` |
@@ -355,6 +355,40 @@ sycm-cli home-overview --date YYYY-MM-DD --raw     # 拿全 self/rivalAvg/rivalG
 - 其他：客单价=`payPct`(=支付金额/支付买家数) / 支付子订单数=`subPayOrdSubCnt` / 平均停留时长=`stayTime` / 旺旺人工响应时长(秒)=`wwReplyManualAvgTimeLen` / 平台判责率=`slrRespRate` / 物流到货时长(小时)=`avgSignTimeHh` / 24小时揽收及时率=`gotInTime24hRate` / 咨询率=`consultRate`
 
 **为什么靠 crc 反查而不是扒前端字典**：接口(overview / getTableData)只回英文字段码+数值，中文名在首页子应用 `op-home`(诊出版本 2.1.54)前端里，其 CDN 包名由 diamond 运行时拼、猜不到(试了 8 种 aligenius/* 全 404)，Claude 自己浏览器没登录跑不了那段配置。最终靠用户发的完整截图 + 「较上一周期」百分比唯一键，把 32 个中文名逐个锁到字段码。
+
+### 全店流量来源 (v0.9+) —— 流量从哪来
+
+sycm **流量/店铺来源**页面的渠道排行，按 UV 降序输出全店各渠道（含子渠道树）的访客数、支付买家数、转化率。用于回答"昨天/去年同期流量从哪来、哪个渠道掉了/涨了"。
+
+接口：`GET /flow/v3/overview/shopFlowSourceTop/v4.json`（绝对路径，不是 csp 前缀），Referer 必须是 `https://sycm.taobao.com/flow/monitor/shopsource/construction`。
+
+| 子命令 | 对应 sycm 页面 | 关键字段 |
+|---|---|---|
+| `shop-flow-source` | 流量/店铺来源/构造 | pageName(渠道名，含 children 子渠道树)、uv(访客数)、itmPayByrCnt(支付买家)、payRate(支付转化率) |
+
+```bash
+sycm-cli shop-flow-source --date YYYY-MM-DD            # 按 UV 降序，含子渠道树
+sycm-cli shop-flow-source --date YYYY-MM-DD --limit 30
+sycm-cli shop-flow-source --date YYYY-MM-DD --raw      # 原始 JSON（含 cycleCrc 环比）
+sycm-cli shop-flow-source --date YYYY-MM-DD --out flow.json
+```
+
+渠道树是多级的：顶级渠道如 `无界(付费)` 下挂 `人群推广`/`关键词推广`/`内容营销`，`内容营销` 再下挂 `超级短视频`/`超级直播`/`短直联动`；`站内沟通` 下挂 `购物车`/`我的淘宝`/`关注`/`消息`。摘要模式自动递归打印 children，缩进表示层级。
+
+常用渠道含义：
+- **无界**：付费推广（万相台/直通车/引力魔方合并后的新平台）
+- **推荐**：猜你喜欢等推荐免费流量
+- **搜索**：手淘搜索
+- **淘宝直播 / 逛逛**：内容免费流量
+- **站内沟通**：购物车/收藏/我的淘宝/关注等私域回访
+- **站外沟通**：自主访问/拍立淘/淘口令
+- **淘宝客**：淘宝联盟 CPS
+
+**做同比对比时手动拉两天**（接口只认单日 dateRange），再按渠道名 join：
+```bash
+sycm-cli shop-flow-source --date 2026-09-29 --raw --out now.json
+sycm-cli shop-flow-source --date 2025-09-29 --raw --out last.json
+```
 
 ### 多店铺登录态（v0.5+）—— 一台机器管多个店
 

@@ -7,7 +7,7 @@
 
 > 生意参谋（sycm.taobao.com）店铺数据 CLI + AI 经营分析 Skill
 
-给 AI 代理一行命令拉取淘宝/天猫自营店铺的大盘、客服、评价、销售、商品、新品和退款数据，并按可复用的方法生成报表和经营分析。
+给 AI 代理一行命令拉取淘宝/天猫自营店铺的大盘、全店流量来源、客服、评价、销售、商品、新品和退款数据，并按可复用的方法生成报表和经营分析。
 
 **v0.9 起商品板块全覆盖**：单品 360 的 14 个模块（详情逐屏 / 价格定位 / 标题死词 / 客群 10 维度
 / 退款归因 / 潜在流失…）+ 宏观监控、商品排行、品类 360、商品集、新品追踪、连带分析、视频分析、
@@ -232,6 +232,23 @@ scripts/sycm.sh item-service     --item-id 123456789 --date 起始 --end-date �
 | `home-trend` | 首页/数据概览趋势 |
 | `grow-factor` | 首页/增长因子（广告引导/直播/新品/会员成交额）|
 
+### 全店流量来源（v0.10+）
+| 子命令 | 对应 sycm 页面 |
+|---|---|
+| `shop-flow-source --date YYYY-MM-DD` | 流量/店铺来源：全店各渠道 UV / 支付买家 / 转化率排行，**含子渠道树**（无界→人群推广/关键词推广/内容营销→超级短视频…，站内沟通→购物车/我的淘宝/关注/消息）|
+
+```bash
+sycm-cli shop-flow-source --date 2026-09-29            # 按 UV 降序，缩进表示子渠道层级
+sycm-cli shop-flow-source --date 2026-09-29 --raw       # 原始 JSON（含 cycleCrc 环比）
+```
+
+做同比对比时拉两天 `--raw` 再按渠道名 join（接口只认单日）：
+
+```bash
+sycm-cli shop-flow-source --date 2026-09-29    --raw --out now.json
+sycm-cli shop-flow-source --date 2025-09-29    --raw --out last.json
+```
+
 ### 多店铺登录态（v0.5+）
 | 子命令 | 用途 |
 |---|---|
@@ -363,6 +380,14 @@ GET https://sycm.taobao.com/csp/api/detail/list
 ```
 
 ## 更新记录
+### v0.10（2026-09-30）—— 全店流量来源
+
+- 新增 `shop-flow-source`：流量/店铺来源页的全店渠道排行，按 UV 降序输出顶级渠道 +
+  递归展开 children 子渠道（无界付费拆人群/关键词/内容营销，站内沟通拆购物车/收藏/关注等），
+  带支付买家数和转化率。接口 `GET /flow/v3/overview/shopFlowSourceTop/v4.json`（绝对路径，
+  Referer 指向 `/flow/monitor/shopsource/construction`）。
+- 用于回答"流量从哪来、同比哪个渠道掉了"，拉两天 `--raw` 即可做全店渠道同比对比。
+
 ### v0.9（2026-08-07）—— 商品板块全覆盖
 
 商品板块从 5 个命令做到 **19 个命令 / 9 个页面 / 22 个模块**，字典 89 → 182 条，
